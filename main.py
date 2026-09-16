@@ -1783,8 +1783,11 @@ async def main():
     logging.info("Kitobxon Club Python Boti ishga tushirilmoqda...")
     await db.init_db()
     logging.info("Ma'lumotlar bazasi tayyor!")
+    await bot.delete_webhook(drop_pending_updates=True)
+    logging.info("Eski kutilayotgan so'rovlar tozalandi.")
     logging.info("Bot polling rejimida ishga tushdi (@kitobxonclub_bot)...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
+
