@@ -29,8 +29,20 @@ from typing import Optional
 load_dotenv()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8860313727:AAE_YmmXzWcXwGF-DKvuK7yC2Op67YLt-HM")
-SUPER_ADMIN_ID = int(os.getenv("ADMIN_ID", "6956456422"))
+def get_super_admin_ids() -> list[int]:
+    raw = os.getenv("ADMIN_ID", "6956456422,906787629")
+    ids = []
+    for item in raw.replace(";", ",").split(","):
+        item = item.strip()
+        if item.isdigit():
+            ids.append(int(item))
+    for default_id in [6956456422, 906787629]:
+        if default_id not in ids:
+            ids.append(default_id)
+    return ids
+
+SUPER_ADMIN_IDS = get_super_admin_ids()
+SUPER_ADMIN_ID = SUPER_ADMIN_IDS[0]
 
 def resolve_book_file(book: dict) -> Optional[str]:
     """
@@ -122,14 +134,17 @@ async def cmd_start(message: Message, state: FSMContext):
     username = message.from_user.username
 
     user = await db.get_or_create_user(user_id, name.strip(), username)
-    is_admin = (user_id == SUPER_ADMIN_ID) or (user["role"] == "ADMIN")
+    is_super = (user_id in SUPER_ADMIN_IDS)
+    is_admin = is_super or (user["role"] == "ADMIN")
 
     welcome_text = (
         f"Assalomu alaykum, <b>{message.from_user.first_name}</b>! 🌟\n\n"
         f"<b>\"Kitobxon Club\"</b> rasmiy Telegram botiga xush kelibsiz!\n\n"
     )
-    if user_id == SUPER_ADMIN_ID:
+    if is_super:
         welcome_text += "👑 <b>Siz tizimning Bosh Administratorisiz (Super Admin).</b>\n\n"
+    elif is_admin:
+        welcome_text += "⭐️ <b>Siz tizim Administratorisiz (Admin).</b>\n\n"
 
     welcome_text += (
         "Bu bot orqali siz:\n"
@@ -149,7 +164,7 @@ async def cmd_start(message: Message, state: FSMContext):
 async def cmd_id(message: Message):
     user_id = message.from_user.id
     user = await db.get_or_create_user(user_id, message.from_user.first_name, message.from_user.username)
-    is_super = (user_id == SUPER_ADMIN_ID)
+    is_super = (user_id in SUPER_ADMIN_IDS)
     is_admin = is_super or (user["role"] == "ADMIN")
     role_name = "👑 Bosh Administrator (Super Admin)" if is_super else ("⭐️ Administrator" if is_admin else "👤 Kitobxon")
 
@@ -230,7 +245,7 @@ async def show_book_details(callback: CallbackQuery):
 
     await callback.answer()
     user = await db.get_or_create_user(callback.from_user.id, callback.from_user.first_name, callback.from_user.username)
-    is_admin = (callback.from_user.id == SUPER_ADMIN_ID or user["role"] == "ADMIN")
+    is_admin = (callback.from_user.id in SUPER_ADMIN_IDS or user["role"] == "ADMIN")
 
     has_pdf = bool(book.get("pdf_file_id") or resolve_book_file(book))
     format_info = "📄 Format: <b>PDF kitob</b>\n" if has_pdf else ""
@@ -266,7 +281,7 @@ async def show_book_details(callback: CallbackQuery):
 async def handle_delete_book(callback: CallbackQuery):
     user_id = callback.from_user.id
     user = await db.get_or_create_user(user_id, callback.from_user.first_name, callback.from_user.username)
-    if user_id != SUPER_ADMIN_ID and user["role"] != "ADMIN":
+    if user_id not in SUPER_ADMIN_IDS and user["role"] != "ADMIN":
         await callback.answer("⛔️ Faqat administratorlar kitobni o'chira oladi!", show_alert=True)
         return
 
@@ -402,7 +417,7 @@ async def show_contests(message: Message):
     is_locked = await db.is_contests_locked()
     user_id = message.from_user.id
     user = await db.get_or_create_user(user_id, message.from_user.first_name, message.from_user.username)
-    is_admin = (user_id == SUPER_ADMIN_ID or user["role"] == "ADMIN")
+    is_admin = (user_id in SUPER_ADMIN_IDS or user["role"] == "ADMIN")
 
     if is_locked:
         text = (
@@ -614,7 +629,7 @@ async def ai_ask_again(callback: CallbackQuery, state: FSMContext):
 async def show_admin_panel(message: Message):
     user_id = message.from_user.id
     user = await db.get_or_create_user(user_id, message.from_user.first_name, message.from_user.username)
-    is_super = (user_id == SUPER_ADMIN_ID)
+    is_super = (user_id in SUPER_ADMIN_IDS)
     is_admin = is_super or (user["role"] == "ADMIN")
 
     if not is_admin:
@@ -633,7 +648,7 @@ async def show_admin_panel(message: Message):
 
 @dp.callback_query(F.data == "back_to_admin")
 async def back_to_admin(callback: CallbackQuery):
-    is_super = (callback.from_user.id == SUPER_ADMIN_ID)
+    is_super = (callback.from_user.id in SUPER_ADMIN_IDS)
     admin_title = "👑 Bosh Administrator (Super Admin)" if is_super else "⭐️ Administrator"
     is_locked = await db.is_contests_locked()
     await callback.answer()
@@ -649,7 +664,7 @@ async def back_to_admin(callback: CallbackQuery):
 async def handle_admin_toggle_contests_lock(callback: CallbackQuery):
     user_id = callback.from_user.id
     user = await db.get_or_create_user(user_id, callback.from_user.first_name, callback.from_user.username)
-    if user_id != SUPER_ADMIN_ID and user["role"] != "ADMIN":
+    if user_id not in SUPER_ADMIN_IDS and user["role"] != "ADMIN":
         await callback.answer("⛔️ Faqat administratorlar uchun!", show_alert=True)
         return
 
@@ -657,7 +672,7 @@ async def handle_admin_toggle_contests_lock(callback: CallbackQuery):
     status_msg = "🔒 Tanlovlar bo'limi QULFLANDI!" if new_is_locked else "🔓 Tanlovlar bo'limi OCHILDI!"
     await callback.answer(status_msg, show_alert=True)
 
-    is_super = (user_id == SUPER_ADMIN_ID)
+    is_super = (user_id in SUPER_ADMIN_IDS)
     try:
         await callback.message.edit_reply_markup(
             reply_markup=kb.get_admin_menu_keyboard(is_super_admin=is_super, contests_locked=new_is_locked)
@@ -668,21 +683,22 @@ async def handle_admin_toggle_contests_lock(callback: CallbackQuery):
 # Admin Users List & Management (Faqat Super Admin)
 @dp.callback_query(F.data == "admin_users")
 async def admin_users_list(callback: CallbackQuery):
-    if callback.from_user.id != SUPER_ADMIN_ID:
-        await callback.answer("⛔️ Faqat Bosh Administrator (Super Admin - 6956456422) admin qo'shishi yoki chiqarishi mumkin!", show_alert=True)
+    if callback.from_user.id not in SUPER_ADMIN_IDS:
+        await callback.answer("⛔️ Faqat Bosh Administrator (Super Admin) admin qo'shishi yoki chiqarishi mumkin!", show_alert=True)
         return
 
     users = await db.get_all_users()
+    super_admin_str = ", ".join(map(str, SUPER_ADMIN_IDS))
     text = (
         "👑 <b>Adminlar va Foydalanuvchilar Boshqaruvi</b>\n\n"
-        f"⭐️ <b>Asosiy Super Admin ID:</b> <code>{SUPER_ADMIN_ID}</code>\n"
-        "<i>(Faqat siz yangi admin tayinlash va ularni lavozimidan ozod etish huquqiga egasiz)</i>\n\n"
+        f"⭐️ <b>Super Adminlar:</b> <code>{super_admin_str}</code>\n"
+        "<i>(Yangi admin tayinlash va boshqarish huquqiga egasiz)</i>\n\n"
         "📋 <b>A'zolar ro'yxati:</b>\n"
     )
     buttons = []
 
     for u in users:
-        is_owner = (u["id"] == SUPER_ADMIN_ID)
+        is_owner = (u["id"] in SUPER_ADMIN_IDS)
         role_icon = "👑 [SUPER ADMIN]" if is_owner else ("⭐️ [ADMIN]" if u["role"] == "ADMIN" else "👤 [USER]")
         text += f"{role_icon} <b>{u['name']}</b> (ID: <code>{u['id']}</code>) — {u['points']} ball\n"
 
@@ -707,7 +723,7 @@ async def admin_users_list(callback: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("role_"))
 async def handle_toggle_role(callback: CallbackQuery):
-    if callback.from_user.id != SUPER_ADMIN_ID:
+    if callback.from_user.id not in SUPER_ADMIN_IDS:
         await callback.answer("⛔️ Faqat Bosh Administrator (Super Admin) admin qo'shishi yoki chiqarishi mumkin!", show_alert=True)
         return
 
@@ -715,19 +731,43 @@ async def handle_toggle_role(callback: CallbackQuery):
     target_id = int(parts[1])
     new_role = parts[2]
 
-    if target_id == SUPER_ADMIN_ID:
+    if target_id in SUPER_ADMIN_IDS:
         await callback.answer("⛔️ Super Admin huquqini o'zgartirib bo'lmaydi!", show_alert=True)
         return
 
     await db.update_user_role(target_id, new_role)
     status_msg = "Admin etib tayinlandi! ⭐️" if new_role == "ADMIN" else "Adminlikdan olindi va oddiy foydalanuvchi qilindi. 👤"
     await callback.answer(f"✅ ID {target_id} {status_msg}", show_alert=True)
+
+    # Yangi adminga xabarnoma va menyuni yuborish
+    try:
+        is_locked = await db.is_contests_locked()
+        if new_role == "ADMIN":
+            await bot.send_message(
+                chat_id=target_id,
+                text=(
+                    "⭐️ <b>Tabriklaymiz! Sizga botda Administratorlik (Admin) huquqi berildi!</b>\n\n"
+                    "Siz uchun <b>«⚙️ Admin Panel»</b> menyusi ochildi. "
+                    "Marhamat, quyidagi tugma orqali admin panelga o'tishingiz mumkin:"
+                ),
+                parse_mode="HTML",
+                reply_markup=kb.get_main_menu(is_admin=True, contests_locked=is_locked)
+            )
+        else:
+            await bot.send_message(
+                chat_id=target_id,
+                text="ℹ️ Sizning administratorlik huquqingiz tugatildi. Bosh menyu yangilandi.",
+                reply_markup=kb.get_main_menu(is_admin=False, contests_locked=is_locked)
+            )
+    except Exception as e:
+        logging.warning(f"Foydalanuvchiga xabar jo'natishda xatolik: {e}")
+
     await admin_users_list(callback)
 
 # ID orqali Admin tayinlash
 @dp.callback_query(F.data == "add_admin_by_id")
 async def start_add_admin_by_id(callback: CallbackQuery, state: FSMContext):
-    if callback.from_user.id != SUPER_ADMIN_ID:
+    if callback.from_user.id not in SUPER_ADMIN_IDS:
         await callback.answer("⛔️ Faqat Super Admin foydalana oladi!", show_alert=True)
         return
     await state.set_state(AdminRoleStates.waiting_for_add_id)
@@ -745,7 +785,7 @@ async def start_add_admin_by_id(callback: CallbackQuery, state: FSMContext):
 
 @dp.message(AdminRoleStates.waiting_for_add_id)
 async def process_add_admin_by_id(message: Message, state: FSMContext):
-    if message.from_user.id != SUPER_ADMIN_ID:
+    if message.from_user.id not in SUPER_ADMIN_IDS:
         await message.answer("⛔️ Faqat Super Admin admin tayinlashi mumkin!")
         await state.clear()
         return
@@ -759,13 +799,29 @@ async def process_add_admin_by_id(message: Message, state: FSMContext):
     await db.set_user_role_by_id(target_id, "ADMIN")
     await state.clear()
 
+    # Yangi tayinlangan adminga darhol xabar va yangi menyu yuboramiz
+    try:
+        is_locked = await db.is_contests_locked()
+        await bot.send_message(
+            chat_id=target_id,
+            text=(
+                "⭐️ <b>Tabriklaymiz! Sizga botda Administratorlik (Admin) huquqi berildi!</b>\n\n"
+                "Siz uchun <b>«⚙️ Admin Panel»</b> menyusi ochildi. "
+                "Marhamat, quyidagi menyu orqali admin panelga o'tishingiz mumkin:"
+            ),
+            parse_mode="HTML",
+            reply_markup=kb.get_main_menu(is_admin=True, contests_locked=is_locked)
+        )
+    except Exception as e:
+        logging.warning(f"Yangi adminga xabarnoma yuborishda xatolik: {e}")
+
     back_btn = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👥 Adminlar ro'yxatiga qaytish", callback_data="admin_users")]
     ])
     await message.answer(
         f"✅ <b>Foydalanuvchi muvaffaqiyatli ADMIN qilindi!</b>\n\n"
         f"🆔 ID: <code>{target_id}</code>\n"
-        f"⭐️ Huquqi: Administrator (kitoblar qo'shish va xabarnoma yuborish imkoni berildi).",
+        f"⭐️ Huquqi: Administrator (unga darhol xabarnoma va ⚙️ Admin Panel tugmasi jo'natildi).",
         parse_mode="HTML",
         reply_markup=back_btn
     )
@@ -773,7 +829,7 @@ async def process_add_admin_by_id(message: Message, state: FSMContext):
 # ID orqali Adminlikdan olish
 @dp.callback_query(F.data == "remove_admin_by_id")
 async def start_remove_admin_by_id(callback: CallbackQuery, state: FSMContext):
-    if callback.from_user.id != SUPER_ADMIN_ID:
+    if callback.from_user.id not in SUPER_ADMIN_IDS:
         await callback.answer("⛔️ Faqat Super Admin foydalana oladi!", show_alert=True)
         return
     await state.set_state(AdminRoleStates.waiting_for_remove_id)
@@ -790,7 +846,7 @@ async def start_remove_admin_by_id(callback: CallbackQuery, state: FSMContext):
 
 @dp.message(AdminRoleStates.waiting_for_remove_id)
 async def process_remove_admin_by_id(message: Message, state: FSMContext):
-    if message.from_user.id != SUPER_ADMIN_ID:
+    if message.from_user.id not in SUPER_ADMIN_IDS:
         await message.answer("⛔️ Faqat Super Admin foydalana oladi!")
         await state.clear()
         return
@@ -801,12 +857,22 @@ async def process_remove_admin_by_id(message: Message, state: FSMContext):
         return
 
     target_id = int(text)
-    if target_id == SUPER_ADMIN_ID:
-        await message.answer("⛔️ Siz Bosh Administratorsiz (Super Admin), o'zingizni o'chira olmaysiz!")
+    if target_id in SUPER_ADMIN_IDS:
+        await message.answer("⛔️ Bu foydalanuvchi Bosh Administrator (Super Admin), uni o'chira olmaysiz!")
         return
 
     await db.set_user_role_by_id(target_id, "USER")
     await state.clear()
+
+    try:
+        is_locked = await db.is_contests_locked()
+        await bot.send_message(
+            chat_id=target_id,
+            text="ℹ️ Sizning administratorlik huquqingiz tugatildi. Bosh menyu yangilandi.",
+            reply_markup=kb.get_main_menu(is_admin=False, contests_locked=is_locked)
+        )
+    except Exception:
+        pass
 
     back_btn = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="👥 Adminlar ro'yxatiga qaytish", callback_data="admin_users")]
@@ -1362,7 +1428,7 @@ async def render_edit_book_card(callback_or_message, book_id: int, notice: str =
 async def handle_edit_book_menu(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     user = await db.get_or_create_user(user_id, callback.from_user.first_name, callback.from_user.username)
-    if user_id != SUPER_ADMIN_ID and user["role"] != "ADMIN":
+    if user_id not in SUPER_ADMIN_IDS and user["role"] != "ADMIN":
         await callback.answer("⛔️ Faqat administratorlar uchun!", show_alert=True)
         return
 
@@ -1382,7 +1448,7 @@ async def handle_cancel_edit_book(callback: CallbackQuery, state: FSMContext):
 async def handle_edit_book_field(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
     user = await db.get_or_create_user(user_id, callback.from_user.first_name, callback.from_user.username)
-    if user_id != SUPER_ADMIN_ID and user["role"] != "ADMIN":
+    if user_id not in SUPER_ADMIN_IDS and user["role"] != "ADMIN":
         await callback.answer("⛔️ Faqat administratorlar uchun!", show_alert=True)
         return
 
@@ -1725,7 +1791,7 @@ async def handle_admin_manage_books(callback: CallbackQuery, state: FSMContext):
     await state.clear()
     user_id = callback.from_user.id
     user = await db.get_or_create_user(user_id, callback.from_user.first_name, callback.from_user.username)
-    if user_id != SUPER_ADMIN_ID and user["role"] != "ADMIN":
+    if user_id not in SUPER_ADMIN_IDS and user["role"] != "ADMIN":
         await callback.answer("⛔️ Faqat administratorlar uchun!", show_alert=True)
         return
 

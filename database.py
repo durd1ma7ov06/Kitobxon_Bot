@@ -8,7 +8,20 @@ load_dotenv()
 
 DB_DIR = os.path.join(os.path.dirname(__file__), "data")
 DB_PATH = os.path.join(DB_DIR, "kitobxon.db")
-SUPER_ADMIN_ID = int(os.getenv("ADMIN_ID", "6956456422"))
+def get_super_admin_ids() -> List[int]:
+    raw = os.getenv("ADMIN_ID", "6956456422,906787629")
+    ids = []
+    for item in raw.replace(";", ",").split(","):
+        item = item.strip()
+        if item.isdigit():
+            ids.append(int(item))
+    for default_id in [6956456422, 906787629]:
+        if default_id not in ids:
+            ids.append(default_id)
+    return ids
+
+SUPER_ADMIN_IDS = get_super_admin_ids()
+SUPER_ADMIN_ID = SUPER_ADMIN_IDS[0]
 
 async def init_db():
     os.makedirs(DB_DIR, exist_ok=True)
@@ -112,15 +125,13 @@ async def init_db():
         INSERT OR IGNORE INTO settings (key, value) VALUES ('contests_locked', '1');
         """)
 
-        # Super Adminni yaratish (Agar mavjud bo'lmasa)
-        await db.execute("""
-        INSERT INTO users (id, name, role, points, level, streak_days)
-        VALUES (?, 'Super Admin (Asosiy)', 'ADMIN', 1000, 5, 1)
-        ON CONFLICT(id) DO UPDATE SET role = 'ADMIN';
-        """, (SUPER_ADMIN_ID,))
-
-        if SUPER_ADMIN_ID != 906787629:
-            await db.execute("UPDATE users SET role = 'USER' WHERE id = 906787629;")
+        # Super Adminlarni yaratish / tasdiqlash
+        for sa_id in SUPER_ADMIN_IDS:
+            await db.execute("""
+            INSERT INTO users (id, name, role, points, level, streak_days)
+            VALUES (?, 'Super Admin', 'ADMIN', 1000, 5, 1)
+            ON CONFLICT(id) DO UPDATE SET role = 'ADMIN';
+            """, (sa_id,))
 
         # Boshlang'ich janrlarni kiritish
         default_categories = [
@@ -153,7 +164,7 @@ async def get_or_create_user(user_id: int, name: str, username: Optional[str] = 
         cursor = await db.execute("SELECT * FROM users WHERE id = ?;", (user_id,))
         user = await cursor.fetchone()
 
-        is_super = (user_id == SUPER_ADMIN_ID)
+        is_super = (user_id in SUPER_ADMIN_IDS)
         role = "ADMIN" if is_super else "USER"
 
         if not user:
