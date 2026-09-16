@@ -144,6 +144,28 @@ async def cmd_start(message: Message, state: FSMContext):
     is_locked = await db.is_contests_locked()
     await message.answer(welcome_text, parse_mode="HTML", reply_markup=kb.get_main_menu(is_admin, contests_locked=is_locked))
 
+@dp.message(Command("id"))
+@dp.message(Command("me"))
+async def cmd_id(message: Message):
+    user_id = message.from_user.id
+    user = await db.get_or_create_user(user_id, message.from_user.first_name, message.from_user.username)
+    is_super = (user_id == SUPER_ADMIN_ID)
+    is_admin = is_super or (user["role"] == "ADMIN")
+    role_name = "👑 Bosh Administrator (Super Admin)" if is_super else ("⭐️ Administrator" if is_admin else "👤 Kitobxon")
+
+    is_locked = await db.is_contests_locked()
+    await message.answer(
+        f"👤 <b>Profil Ma'lumotlari:</b>\n\n"
+        f"🆔 <b>Sizning ID:</b> <code>{user_id}</code>\n"
+        f"📛 <b>Ism:</b> {user['name']}\n"
+        f"🔰 <b>Maqomingiz:</b> <b>{role_name}</b>\n"
+        f"💰 <b>To'plangan ball:</b> {user['points']} ball\n"
+        f"🎖 <b>Daraja:</b> {user['level']}-daraja\n\n"
+        f"<i>Bosh menyu yangilandi!</i>",
+        parse_mode="HTML",
+        reply_markup=kb.get_main_menu(is_admin=is_admin, contests_locked=is_locked)
+    )
+
 # ==========================================
 # 📚 KUTUBXONA HANDLERS
 # ==========================================
@@ -586,13 +608,16 @@ async def ai_ask_again(callback: CallbackQuery, state: FSMContext):
 # ==========================================
 # ⚙️ ADMIN PANEL HANDLERS
 # ==========================================
+@dp.message(Command("admin"))
+@dp.message(Command("panel"))
 @dp.message(F.text == "⚙️ Admin Panel")
 async def show_admin_panel(message: Message):
     user_id = message.from_user.id
     user = await db.get_or_create_user(user_id, message.from_user.first_name, message.from_user.username)
     is_super = (user_id == SUPER_ADMIN_ID)
+    is_admin = is_super or (user["role"] == "ADMIN")
 
-    if not is_super and user["role"] != "ADMIN":
+    if not is_admin:
         await message.answer("⛔️ Ushbu bo'lim faqat administratorlar uchun mo'ljallangan.")
         return
 
