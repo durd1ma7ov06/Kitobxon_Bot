@@ -118,6 +118,7 @@ class EditBookStates(StatesGroup):
     waiting_for_description = State()
     waiting_for_pages = State()
     waiting_for_pdf = State()
+    waiting_for_cover = State()
 
 class EditCategoryStates(StatesGroup):
     waiting_for_name = State()
@@ -619,6 +620,57 @@ async def ai_ask_again(callback: CallbackQuery, state: FSMContext):
         "🤖 Savolingiz yoki qiziqishingizni yozing (masalan: <i>\"drama kitoblar\"</i>, <i>\"detektiv\"</i>, <i>\"biznes kitoblar\"</i>):",
         parse_mode="HTML"
     )
+
+# ==========================================
+# 📊 BOT STATISTIKASI (ADMIN)
+# ==========================================
+@dp.callback_query(F.data == "admin_stats")
+@dp.message(Command("stats"))
+async def show_admin_statistics(event):
+    user_id = event.from_user.id
+    user = await db.get_or_create_user(user_id, event.from_user.first_name, event.from_user.username)
+    is_admin = (user_id in SUPER_ADMIN_IDS or user.get("role") == "ADMIN")
+
+    if not is_admin:
+        if isinstance(event, CallbackQuery):
+            await event.answer("⛔️ Faqat administratorlar uchun!", show_alert=True)
+        else:
+            await event.answer("⛔️ Faqat administratorlar uchun!")
+        return
+
+    stats = await db.get_bot_statistics()
+    top_books_str = ""
+    for idx, b in enumerate(stats["top_books"]):
+        top_books_str += f"   {idx+1}. 📖 <b>{b['title']}</b> — <i>{b['read_count']} marta o'qildi</i>\n"
+    if not top_books_str:
+        top_books_str = "   <i>Hozircha mutolaa qilingan kitoblar mavjud emas</i>\n"
+
+    text = (
+        "📊 <b>Kitobxon Club — Jonli Bot Statistikasi</b>\n\n"
+        "👥 <b>Foydalanuvchilar:</b>\n"
+        f"• Jami kitobxonlar: <b>{stats['total_users']} nafar</b>\n"
+        f"• Bugun qo'shilganlar: <b>+{stats['today_users']} yangi a'zo</b>\n"
+        f"• Administratorlar: <b>{stats['total_admins']} nafar</b>\n\n"
+        "📚 <b>Kutubxona ko'rsatkichlari:</b>\n"
+        f"• Jami kitoblar: <b>{stats['total_books']} ta</b>\n"
+        f"• PDF yuklangan: <b>{stats['books_with_pdf']} ta</b>\n"
+        f"• Janrlar soni: <b>{stats['total_categories']} ta</b>\n"
+        f"• Jami mutolaa/yuklab olishlar: <b>{stats['total_reads']} marta</b>\n\n"
+        "🔥 <b>Eng ko'p o'qilgan sara kitoblar:</b>\n"
+        f"{top_books_str}\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🕒 <i>Ma'lumotlar real vaqtda bazadan olindi.</i>"
+    )
+    back_btn = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Yangilash", callback_data="admin_stats")],
+        [InlineKeyboardButton(text="🔙 Admin menyusiga qaytish", callback_data="back_to_admin")]
+    ])
+
+    if isinstance(event, CallbackQuery):
+        await event.answer()
+        await event.message.edit_text(text, parse_mode="HTML", reply_markup=back_btn)
+    else:
+        await event.answer(text, parse_mode="HTML", reply_markup=back_btn)
 
 # ==========================================
 # ⚙️ ADMIN PANEL HANDLERS
@@ -1531,6 +1583,19 @@ async def handle_edit_book_field(callback: CallbackQuery, state: FSMContext):
             reply_markup=cancel_btn
         )
 
+    elif field == "cover":
+        await state.set_state(EditBookStates.waiting_for_cover)
+        await callback.answer()
+        await callback.message.edit_text(
+            f"🖼 <b>Kitob muqova rasmini o'zgartirish</b>\n\n"
+            f"Kitob: <b>{book['title']}</b>\n\n"
+            f"Yangi muqova rasmini biriktirish uchun:\n"
+            f"1️⃣ Telegram orqali to'g'ridan-to'g'ri 📷 <b>rasm (photo)</b> yuborishingiz mumkin;\n"
+            f"2️⃣ Yoki internetdagi rasm havolasini (<b>https://... URL</b>) yozib yuborishingiz mumkin 👇",
+            parse_mode="HTML",
+            reply_markup=cancel_btn
+        )
+
     elif field == "pdf":
         await state.set_state(EditBookStates.waiting_for_pdf)
         await callback.answer()
@@ -1619,6 +1684,46 @@ async def process_edit_book_pages(message: Message, state: FSMContext):
     await db.update_book(book_id, pages=pages)
     await state.clear()
     await render_edit_book_card(message, book_id, notice=f"🎉 Sahifalar soni yangilandi: <b>{pages} sahifa</b>")
+
+# Kitob muqova rasmi qabul qilish (Telegram rasm - photo)
+@dp.message(EditBookStates.waiting_for_cover, F.photo)
+async def process_edit_book_cover_photo(message: Message, state: FSMContext):
+    data = await state.get_data()
+    book_id = data.get("edit_book_id")
+    if not book_id:
+        await state.clear()
+        return
+
+    photo_file_id = message.photo[-1].file_id
+    await db.update_book(book_id, cover_url=photo_file_id)
+    await state.clear()
+    await render_edit_book_card(
+        message, 
+        book_id, 
+        notice="🎉 Kitob muqovasi uchun yangi rasm muvaffaqiyatli saqlandi!"
+    )
+
+# Kitob muqova rasmi qabul qilish (URL havola - text)
+@dp.message(EditBookStates.waiting_for_cover, F.text)
+async def process_edit_book_cover_url(message: Message, state: FSMContext):
+    data = await state.get_data()
+    book_id = data.get("edit_book_id")
+    if not book_id:
+        await state.clear()
+        return
+
+    url = message.text.strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        await message.answer("⚠️ Iltimos, Telegram orqali rasm yuboring yoki to'g'ri rasm havolasini (https://...) kiriting:")
+        return
+
+    await db.update_book(book_id, cover_url=url)
+    await state.clear()
+    await render_edit_book_card(
+        message, 
+        book_id, 
+        notice="🎉 Kitob muqovasi uchun yangi havola muvaffaqiyatli saqlandi!"
+    )
 
 # Telegram orqali yangi PDF tashlanganda
 @dp.message(EditBookStates.waiting_for_pdf, F.document)

@@ -65,7 +65,8 @@ def get_edit_book_keyboard(book_id: int) -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📑 Tavsifi (Izohi)", callback_data=f"edit_bfield_{book_id}_description")
         ],
         [
-            InlineKeyboardButton(text="📄 PDF faylni yangilash / almashtirish", callback_data=f"edit_bfield_{book_id}_pdf")
+            InlineKeyboardButton(text="🖼 Muqova rasmini o'zgartirish", callback_data=f"edit_bfield_{book_id}_cover"),
+            InlineKeyboardButton(text="📄 PDF faylni yangilash", callback_data=f"edit_bfield_{book_id}_pdf")
         ],
         [
             InlineKeyboardButton(text="🗑 Kitobni butunlay o'chirish", callback_data=f"del_book_{book_id}")
@@ -80,6 +81,7 @@ def get_edit_book_keyboard(book_id: int) -> InlineKeyboardMarkup:
 def get_admin_menu_keyboard(is_super_admin: bool = False, contests_locked: bool = True) -> InlineKeyboardMarkup:
     lock_text = "🔒 Tanlovlar: Qulflangan (Ochish)" if contests_locked else "🔓 Tanlovlar: Ochiq (Qulflash)"
     buttons = [
+        [InlineKeyboardButton(text="📊 Bot statistikasi (Jonli hisobot)", callback_data="admin_stats")],
         [InlineKeyboardButton(text="➕ Yangi kitob qo'shish (PDF yuklash)", callback_data="admin_add_book")],
         [InlineKeyboardButton(text="📚 Kitoblarni boshqarish (Tahrirlash & O'chirish)", callback_data="admin_manage_books")],
         [InlineKeyboardButton(text="📂 Toifalar (Janrlar) boshqaruvi", callback_data="admin_categories")],

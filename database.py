@@ -467,3 +467,51 @@ async def toggle_contests_lock() -> bool:
     new_val = "0" if current else "1"
     await set_setting("contests_locked", new_val)
     return new_val == "1"
+
+# === STATISTIKA ===
+async def get_bot_statistics() -> Dict[str, Any]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        # Jami foydalanuvchilar
+        cursor = await db.execute("SELECT COUNT(*) FROM users;")
+        total_users = (await cursor.fetchone())[0]
+
+        # Bugun qo'shilganlar
+        cursor = await db.execute("SELECT COUNT(*) FROM users WHERE DATE(created_at) = DATE('now');")
+        today_users = (await cursor.fetchone())[0]
+
+        # Adminlar soni
+        cursor = await db.execute("SELECT COUNT(*) FROM users WHERE role = 'ADMIN';")
+        total_admins = (await cursor.fetchone())[0]
+
+        # Jami kitoblar soni
+        cursor = await db.execute("SELECT COUNT(*) FROM books;")
+        total_books = (await cursor.fetchone())[0]
+
+        # PDF biriktirilgan kitoblar soni
+        cursor = await db.execute("SELECT COUNT(*) FROM books WHERE pdf_file_id IS NOT NULL OR file_path IS NOT NULL;")
+        books_with_pdf = (await cursor.fetchone())[0]
+
+        # Janrlar soni
+        cursor = await db.execute("SELECT COUNT(*) FROM categories;")
+        total_categories = (await cursor.fetchone())[0]
+
+        # Jami mutolaalar / o'qilishlar soni
+        cursor = await db.execute("SELECT COALESCE(SUM(read_count), 0) FROM books;")
+        row = await cursor.fetchone()
+        total_reads = row[0] if row else 0
+
+        # Eng ko'p o'qilgan 3 ta kitob
+        cursor = await db.execute("SELECT title, author, read_count FROM books ORDER BY read_count DESC LIMIT 3;")
+        top_books = await cursor.fetchall()
+
+        return {
+            "total_users": total_users,
+            "today_users": today_users,
+            "total_admins": total_admins,
+            "total_books": total_books,
+            "books_with_pdf": books_with_pdf,
+            "total_categories": total_categories,
+            "total_reads": total_reads,
+            "top_books": [{"title": b[0], "author": b[1], "read_count": b[2]} for b in top_books]
+        }
+
