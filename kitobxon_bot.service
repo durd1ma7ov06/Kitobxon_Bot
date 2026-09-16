@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/root/Kitobxon-Club
-ExecStart=/root/Kitobxon-Club/.venv/bin/python main.py
+User=ubuntu
+WorkingDirectory=/home/ubuntu/Kitobxon_Bot
+ExecStart=/home/ubuntu/Kitobxon_Bot/.venv/bin/python main.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
